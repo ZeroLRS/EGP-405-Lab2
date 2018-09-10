@@ -25,6 +25,7 @@
 // standard includes
 #include <stdio.h>
 #include <string.h>
+#include <list>
 
 
 // RakNet includes
@@ -38,7 +39,12 @@ enum GameMessages
 {
 	ID_CUSTOM_MESSAGE_START = ID_USER_PACKET_ENUM,
 
-	ID_GAME_MESSAGE_1, 
+	ID_GAME_MESSAGE, 
+	ID_CHAT_REQUEST,
+	ID_CHAT_MESSAGE,
+	ID_USERNAME_REQUEST,
+	ID_USERNAME_MESSAGE,
+	ID_USER_JOINED,
 };
 
 
@@ -48,11 +54,36 @@ struct GameMessageData
 {
 	unsigned char typeID;
 
-	// ****TO-DO: implement game message data struct
+	char message[255];
+};
 
+struct ChatRequest
+{
+	unsigned char typeID;
+
+	char recipient[31];
+
+	char message[511];
+};
+
+struct ChatMessage
+{
+	unsigned char typeID;
+
+	bool pmessage;
+
+	char sender[31];
+
+	char message[511];
 };
 
 #pragma pack (pop)
+
+struct userID
+{
+	char username[31];
+	RakNet::RakNetGUID guid;
+};
 
 
 // entry function
@@ -68,6 +99,10 @@ int main(int const argc, char const *const *const argv)
 	// global peer settings for this app
 	int isServer = 0;
 	unsigned short serverPort = 60000;
+	char username[31];
+
+	// list of usernames and identifiers
+	std::list<userID> users;
 
 	// ask user for peer type
 	printf("(C)lient or (S)erver?\n");
@@ -87,6 +122,10 @@ int main(int const argc, char const *const *const argv)
 			strcpy(str, "127.0.0.1");
 		}
 
+		printf("Enter desired username: \n");
+		fgets(str, bufferSz, stdin);
+		strcpy(username, str);
+
 		printf("Starting the client.\n");
 		peer->Connect(str, serverPort, 0, 0);
 	}
@@ -98,6 +137,8 @@ int main(int const argc, char const *const *const argv)
 		unsigned int maxClients = atoi(str);
 		RakNet::SocketDescriptor sd(serverPort, 0);
 		peer->Startup(maxClients, &sd, 1);
+
+		strcpy(username, "Server");
 
 		// We need to let the server accept incoming connections from the clients
 		printf("Starting the server.\n");
@@ -128,19 +169,56 @@ int main(int const argc, char const *const *const argv)
 				printf("Another client has connected.\n");
 				break;
 			case ID_CONNECTION_REQUEST_ACCEPTED:
+			{
 				printf("Our connection request has been accepted.\n");
+				// Send a request for our username to the server
+				GameMessageData msg[1];
+				msg->typeID = ID_USERNAME_REQUEST;
+				strcpy(msg->message, username);
+
+				peer->Send((char*)msg, sizeof(msg), HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+			}
+				break;
+			case ID_USERNAME_REQUEST:
+			{
+				// Check if a given username is available, if it is, add it to the list, otherwise send the user an error.
+				GameMessageData data = *(GameMessageData*)packet->data;
+				char reqUsername[31];
+				GameMessageData msg[1] = { ID_USERNAME_MESSAGE };
+
+				strcpy(reqUsername, data.message);
+
+				bool foundDupe = false;
+				for (userID currID : users)
 				{
-					// Use a BitStream to write a custom user message
-					// Bitstreams are easier to use than sending casted structures, 
-					//	and handle endian swapping automatically
-				//	RakNet::BitStream bsOut;
-				//	bsOut.Write((RakNet::MessageID)ID_GAME_MESSAGE_1);
-				//	bsOut.Write("Hello world");
-				//	peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
-
-					// ****TO-DO: write and send packet without using bitstream
-
+					if (strcmp(reqUsername, currID.username))
+					{
+						foundDupe = true;
+						break;
+					}
 				}
+				if (strcmp(reqUsername, username)) // Make sure the user isn't impersonating the server
+				{
+					foundDupe = true;
+				}
+
+				// If the requested username already exists.
+				if (foundDupe)
+				{
+					strcpy(msg->message, "Username taken, please reconnect and try again.");
+					peer->Send((char*)msg, sizeof(msg), HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+					peer->CloseConnection(packet->systemAddress, true);
+				}
+				else // If the username isn't taken.
+				{
+					strcpy(msg->message, "Username not taken, connection successful.");
+					peer->Send((char*)msg, sizeof(msg), HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+					userID newUser;
+					newUser.guid = packet->guid;
+					strcpy(newUser.username, reqUsername);
+					users.push_back(newUser);
+				}
+			}
 				break;
 			case ID_NEW_INCOMING_CONNECTION:
 				printf("A connection is incoming.\n");
@@ -165,7 +243,7 @@ int main(int const argc, char const *const *const argv)
 				}
 				break;
 
-			case ID_GAME_MESSAGE_1:
+			case ID_GAME_MESSAGE:
 				printf("DEBUG MESSAGE: received packet ID_GAME_MESSAGE_1.\n");
 				{
 				//	RakNet::RakString rs;
