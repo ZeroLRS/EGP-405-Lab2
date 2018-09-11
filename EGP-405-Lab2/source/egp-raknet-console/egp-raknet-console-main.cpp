@@ -43,10 +43,9 @@
 
 
 // RakNet includes
-#include "RakNet/RakPeerInterface.h"
 #include "RakNet/MessageIdentifiers.h"
 #include "RakNet/RakNetTypes.h"
-#include "RakNet/BitStream.h"
+#include "RakNet/RakPeerInterface.h"
 
 
 enum GameMessages
@@ -60,7 +59,6 @@ enum GameMessages
 	ID_USERNAME_MESSAGE,
 	ID_USER_JOINED,
 };
-
 
 #pragma pack(push, 1)
 struct GameMessageData
@@ -103,67 +101,49 @@ struct userID
 };
 
 // entry function
-int main(int const argc, char const *const *const argv)
+int main(void)
 {
-	// buffer
-	const unsigned int bufferSz = 512;
-	char str[bufferSz];
+	char str[512];
+	bool isServer;
 
-	// create and return instance of peer interface
-	RakNet::RakPeerInterface *peer = RakNet::RakPeerInterface::GetInstance();
+	unsigned int MAX_CLIENTS = 10;
+	unsigned short SERVER_PORT = 60000;
 
-	// global peer settings for this app
-	int isServer = 0;
-	unsigned short serverPort = 60000;
-	char username[31];
-
-	// list of usernames and identifiers
+	// Host Data
 	std::list<userID> users;
 
-	// ask user for peer type
-	printf("(C)lient or (S)erver?\n");
-	fgets(str, bufferSz, stdin);
+	// Client Data
+	char username[31];
 
-	// start networking
-	if ((str[0] == 'c') || (str[0] == 'C'))
-	{
+	// Create RakNet peer and packet instance
+	RakNet::RakPeerInterface* pPeer = RakNet::RakPeerInterface::GetInstance();
+	RakNet::Packet* pPacket;
+
+	// Ask user for peer type
+	printf("(C)lient or (S)erver? \n");
+	fgets(str, sizeof(str), stdin);
+
+	// Ask user for the port
+	printf("What is the server port? \n");
+	scanf("%hu", &SERVER_PORT);
+
+	// Setup Client Peer
+	if ((str[0] == 'c') || (str[0] == 'C')) {
 		RakNet::SocketDescriptor sd;
-		peer->Startup(1, &sd, 1);
+		pPeer->Startup(1, &sd, 1);
 
-		printf("Enter server IP or hit enter for 127.0.0.1\n");
-		fgets(str, bufferSz, stdin);
-
-		if (str[0] == '\n')
-		{
-			strcpy(str, "127.0.0.1");
-		}
-
-		printf("Enter desired username: \n");
-		fgets(str, bufferSz, stdin);
-		strcpy(username, str);
-
-		printf("Starting the client.\n");
-		peer->Connect(str, serverPort, 0, 0);
+		isServer = false;
 	}
-	else
-	{
-		printf("Enter maximum number of clients: \n");
-		fgets(str, bufferSz, stdin);
+	// Setup Host(Server) Peer
+	else {
+		printf("Maximum number of clients? \n");
+		scanf("%d", &MAX_CLIENTS);
 
-		unsigned int maxClients = atoi(str);
-		RakNet::SocketDescriptor sd(serverPort, 0);
-		peer->Startup(maxClients, &sd, 1);
+		RakNet::SocketDescriptor sd(SERVER_PORT, 0);
+		pPeer->Startup(MAX_CLIENTS, &sd, 1);
 
-		strcpy(username, "Server");
-
-		// We need to let the server accept incoming connections from the clients
-		printf("Starting the server.\n");
-		peer->SetMaximumIncomingConnections(maxClients);
-		isServer = 1;
+		isServer = true;
 	}
-
-
-	RakNet::Packet *packet;
 
 	while (1)
 	{
