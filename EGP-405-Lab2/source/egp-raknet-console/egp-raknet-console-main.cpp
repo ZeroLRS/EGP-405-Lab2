@@ -40,7 +40,6 @@
 #include <string.h>
 #include <list>
 
-
 // RakNet includes
 #include "RakNet/MessageIdentifiers.h"
 #include "RakNet/RakNetTypes.h"
@@ -109,11 +108,11 @@ int main(void)
 	unsigned short SERVER_PORT = 60000;
 
 	// Host Data
-	char hostName[31];
+	char hostName[31] = "";
 	std::list<userID> users;
 
 	// Client Data
-	char username[31];
+	char username[31] = "";
 
 	// Create RakNet peer and packet instance
 	RakNet::RakPeerInterface* pPeer = RakNet::RakPeerInterface::GetInstance();
@@ -204,7 +203,7 @@ int main(void)
 				// ****TODO: Handle edge-case for username being taken?
 
 				// Send username message request
-				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
 			}
 			break;
 			case ID_USERNAME_REQUEST:
@@ -215,12 +214,13 @@ int main(void)
 				BaseData usernameMsg[1];
 				usernameMsg->typeID = ID_GAME_MESSAGE;
 
-				// Host has received a username request from a client
-				printf("Username Request");
-
 				// Create packet to process client username request
 				BaseData* data = (BaseData*)pPacket->data;
 				strcpy(usernameReq, data->message);
+
+				// Host has received a username request from a client
+				printf("Username Request Initiated for ");
+				printf(usernameReq);
 
 				// Check if any connect peers have the same username
 				for (userID currID : users) {
@@ -230,13 +230,12 @@ int main(void)
 					}
 				}
 				// Check if the server username conflicts with the client username
-				if (strcmp(usernameReq, hostName))
-				{
+				if (strcmp(usernameReq, hostName) == 0) {
 					isDuplicate = true;
 				}
 
 				// Send username already exists message to peer
-				if (isDuplicate = true) {
+				if (isDuplicate == true) {
 					strcpy(usernameMsg->message, "Username taken, reconnect and select a new one.");
 					// End peer connection
 					pPeer->CloseConnection(pPacket->systemAddress, true);
@@ -246,13 +245,14 @@ int main(void)
 					strcpy(usernameMsg->message, "Username available, say hello!");
 
 					// Add username to list tracked by server
-					userID newUser;
-					newUser.guid = pPacket->guid;
-					strcpy(newUser.username, usernameReq);
-					users.push_back(newUser);
+					//userID newUser;
+					//newUser.guid = pPacket->guid;
+					//strcpy(newUser.username, usernameReq);
+					//users.push_back(newUser);
+					//printf("%s", users.size());
 
-					// Send success packet
-					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+					// Send username available success packet
+					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
 				}
 			}
 			break;
@@ -288,7 +288,9 @@ int main(void)
 			}
 			case ID_GAME_MESSAGE:
 			{
-				printf("DEBUG MESSAGE: received packet ID_GAME_MESSAGE_1.\n");
+				BaseData* data = (BaseData*)pPacket->data;
+				printf("%s \n", data->message);
+
 				break;
 			}
 			default:
@@ -299,12 +301,8 @@ int main(void)
 	}
 
 
-	// shut down networking by destroying peer interface instance
+	// Shut down & destroy peer
 	RakNet::RakPeerInterface::DestroyInstance(pPeer);
 
-
-	// exit
-	//printf("\n\n");
-	//system("pause");
 	return 0;
 }

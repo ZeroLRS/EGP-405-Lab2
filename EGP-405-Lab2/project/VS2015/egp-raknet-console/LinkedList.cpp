@@ -12,7 +12,3 @@
 // - checking service, which may retain a copy of the project on its database.
 
 #include "LinkedList.h"
-
-Node* createNode(char username[31]) {
-	//Node* pNewNode = malloc(sizeof(Node)*node);
-}
