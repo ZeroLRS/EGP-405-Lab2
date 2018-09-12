@@ -109,6 +109,7 @@ int main(void)
 	unsigned short SERVER_PORT = 60000;
 
 	// Host Data
+	char hostName[31];
 	std::list<userID> users;
 
 	// Client Data
@@ -192,54 +193,66 @@ int main(void)
 			}
 			case ID_CONNECTION_REQUEST_ACCEPTED:
 			{
+				// Host has accepted client connection
 				printf("Our connection request has been accepted.\n");
-				// Send a request for our username to the server
+
+				// Create packet to request current username from the server
 				BaseData msg[1];
 				msg->typeID = ID_USERNAME_REQUEST;
 				strcpy(msg->message, username);
 
+				// ****TODO: Handle edge-case for username being taken?
+
+				// Send username message request
 				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
 			}
 			break;
 			case ID_USERNAME_REQUEST:
 			{
+				char usernameReq[31];
+				bool isDuplicate = false;
+
+				BaseData usernameMsg[1];
+				usernameMsg->typeID = ID_GAME_MESSAGE;
+
+				// Host has received a username request from a client
 				printf("Username Request");
-				// Check if a given username is available, if it is, add it to the list, otherwise send the user an error.
-				BaseData data = *(BaseData*)pPacket->data;
-				char reqUsername[31];
-				BaseData msg[1] = { ID_USERNAME_MESSAGE };
 
-				strcpy(reqUsername, data.message);
+				// Create packet to process client username request
+				BaseData* data = (BaseData*)pPacket->data;
+				strcpy(usernameReq, data->message);
 
-				bool foundDupe = false;
-				for (userID currID : users)
-				{
-					if (strcmp(reqUsername, currID.username))
-					{
-						foundDupe = true;
+				// Check if any connect peers have the same username
+				for (userID currID : users) {
+					if (strcmp(usernameReq, currID.username)) {
+						isDuplicate = true;
 						break;
 					}
 				}
-				if (strcmp(reqUsername, username)) // Make sure the user isn't impersonating the server
+				// Check if the server username conflicts with the client username
+				if (strcmp(usernameReq, hostName))
 				{
-					foundDupe = true;
+					isDuplicate = true;
 				}
 
-				// If the requested username already exists.
-				if (foundDupe)
-				{
-					strcpy(msg->message, "Username taken, please reconnect and try again.");
-					pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+				// Send username already exists message to peer
+				if (isDuplicate = true) {
+					strcpy(usernameMsg->message, "Username taken, reconnect and select a new one.");
+					// End peer connection
 					pPeer->CloseConnection(pPacket->systemAddress, true);
 				}
-				else // If the username isn't taken.
-				{
-					strcpy(msg->message, "Username not taken, connection successful.");
-					pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+				// Accept connection if username is available
+				else {
+					strcpy(usernameMsg->message, "Username available, say hello!");
+
+					// Add username to list tracked by server
 					userID newUser;
 					newUser.guid = pPacket->guid;
-					strcpy(newUser.username, reqUsername);
+					strcpy(newUser.username, usernameReq);
 					users.push_back(newUser);
+
+					// Send success packet
+					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
 				}
 			}
 			break;
