@@ -108,7 +108,7 @@ int main(void)
 	unsigned short SERVER_PORT = 60000;
 
 	// Host Data
-	char hostName[32] = "";
+	char hostName[32] = "Server";
 	std::list<userID> users;
 
 	// Client Data
@@ -201,7 +201,7 @@ int main(void)
 				strcpy(msg->message, username);
 
 				// Send username message request
-				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
 			}
 			break;
 			case ID_USERNAME_REQUEST:
@@ -222,7 +222,7 @@ int main(void)
 
 				// Check if any connect peers have the same username
 				for (userID currID : users) {
-					if (strcmp(usernameReq, currID.username)) {
+					if (strcmp(usernameReq, currID.username) == 0) {
 						isDuplicate = true;
 						break;
 					}
@@ -236,6 +236,7 @@ int main(void)
 				if (isDuplicate == true) {
 					strcpy(usernameMsg->message, "Username taken, reconnect and select a new one.");
 					// End peer connection
+					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
 					pPeer->CloseConnection(pPacket->systemAddress, true);
 				}
 				// Accept connection if username is available
@@ -243,14 +244,14 @@ int main(void)
 					strcpy(usernameMsg->message, "Username available, say hello!");
 
 					// Add username to list tracked by server
-					//userID newUser;
-					//newUser.guid = pPacket->guid;
-					//strcpy(newUser.username, usernameReq);
-					//users.push_back(newUser);
+					userID newUser;
+					newUser.guid = pPacket->guid;
+					strcpy(newUser.username, usernameReq);
+					users.push_back(newUser);
 					//printf("%s", users.size());
 
 					// Send username available success packet
-					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
 
 					//***TODO: Server should broadcast a message welcoming new participant
 				}
@@ -307,11 +308,67 @@ int main(void)
 					msg->typeID = ID_CHAT_REQUEST;
 					strcpy(msg->message, str);
 
-					pPeer->Send((char*)msg, sizeof(ChatRequest), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+					pPeer->Send((char*)msg, sizeof(ChatRequest), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
 				}
 
 				break;
 			}
+			case ID_CHAT_REQUEST:
+			{
+				ChatRequest* data = (ChatRequest*)pPacket->data;
+				ChatMessage outMsg[1];
+				outMsg->sender[0] = 0;
+
+				// Go through the users and find this message's sender
+				for (userID currID : users)
+				{
+					if (currID.guid == pPacket->guid)
+					{
+						strcpy(outMsg->sender, currID.username);
+					}
+				}
+
+				// Make sure we got a sender
+				if (outMsg->sender[0] == 0)
+				{
+					printf("Sender user not registred.");
+					break;
+				}
+
+				// If the message is not a private one
+				if (strcmp(data->recipient, "") == 0)
+				{
+					outMsg->isPrivate = true;
+					// Handle PM GUID switch here
+				}
+				else
+				{
+					outMsg->isPrivate = false;
+				}
+
+				outMsg->typeID = ID_CHAT_MESSAGE;
+				strcpy(outMsg->message, data->message);
+
+				printf("%s: %s", outMsg->sender, outMsg->message);
+
+				pPeer->Send((char*)outMsg, sizeof(ChatMessage), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+			}
+				break;
+			case ID_CHAT_MESSAGE:
+			{
+				ChatMessage* data = (ChatMessage*)pPacket->data;
+
+				if (data->isPrivate)
+				{
+					printf("PM From %s: %s", data->sender, data->message);
+				}
+				else
+				{
+					printf("%s: %s", data->sender, data->message);
+				}
+
+			}
+				break;
 			default:
 				printf("Message with identifier %i has arrived.\n", pPacket->data[0]);
 				// Input loop
