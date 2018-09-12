@@ -6,7 +6,6 @@
 //
 // Vedant Chaudhari, 1532077
 // Lucas Spiker
-// ****TODO: Finish authenticity
 //
 // We certify that this work is entirely our own.The assessor of this project may reproduce this project 
 // and provide copies to other academic staff, and/or communicate a copy of this project to a plagiarism 
@@ -61,7 +60,7 @@ enum GameMessages
 };
 
 #pragma pack(push, 1)
-struct GameMessageData
+struct BaseData
 {
 	unsigned char typeID;
 
@@ -145,15 +144,36 @@ int main(void)
 		isServer = true;
 	}
 
+	// Set host parameters
+	if (isServer) {
+		printf("Setting up the server... \n");
+		pPeer->SetMaximumIncomingConnections(MAX_CLIENTS);
+	}
+	// Set client parameters
+	else {
+		printf("Enter server IP or enter for localhost \n");
+		fgets(str, sizeof(str), stdin);
+
+		if (str[0] == '\n') {
+			strcpy(str, "127.0.0.1");
+		}
+
+		printf("Enter a nickname: \n");
+		fgets(username, sizeof(username), stdin);
+
+		printf("Connecting to server... \n");
+		pPeer->Connect(str, SERVER_PORT, 0, 0);
+	}
+
 	while (1)
 	{
 		for (
-			packet = peer->Receive(); 
-			packet; 
-			peer->DeallocatePacket(packet), packet = peer->Receive()
+			pPacket = pPeer->Receive(); 
+			pPacket; 
+			pPeer->DeallocatePacket(pPacket), pPacket = pPeer->Receive()
 			)
 		{
-			switch (packet->data[0])
+			switch (pPacket->data[0])
 			{
 			case ID_REMOTE_DISCONNECTION_NOTIFICATION:
 			{
@@ -174,20 +194,20 @@ int main(void)
 			{
 				printf("Our connection request has been accepted.\n");
 				// Send a request for our username to the server
-				GameMessageData msg[1];
+				BaseData msg[1];
 				msg->typeID = ID_USERNAME_REQUEST;
 				strcpy(msg->message, username);
 
-				peer->Send((char*)msg, sizeof(GameMessageData), HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
 			}
 			break;
 			case ID_USERNAME_REQUEST:
 			{
 				printf("Username Request");
 				// Check if a given username is available, if it is, add it to the list, otherwise send the user an error.
-				GameMessageData data = *(GameMessageData*)packet->data;
+				BaseData data = *(BaseData*)pPacket->data;
 				char reqUsername[31];
-				GameMessageData msg[1] = { ID_USERNAME_MESSAGE };
+				BaseData msg[1] = { ID_USERNAME_MESSAGE };
 
 				strcpy(reqUsername, data.message);
 
@@ -209,15 +229,15 @@ int main(void)
 				if (foundDupe)
 				{
 					strcpy(msg->message, "Username taken, please reconnect and try again.");
-					peer->Send((char*)msg, sizeof(GameMessageData), HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
-					peer->CloseConnection(packet->systemAddress, true);
+					pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+					pPeer->CloseConnection(pPacket->systemAddress, true);
 				}
 				else // If the username isn't taken.
 				{
 					strcpy(msg->message, "Username not taken, connection successful.");
-					peer->Send((char*)msg, sizeof(GameMessageData), HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
+					pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, false);
 					userID newUser;
-					newUser.guid = packet->guid;
+					newUser.guid = pPacket->guid;
 					strcpy(newUser.username, reqUsername);
 					users.push_back(newUser);
 				}
@@ -259,7 +279,7 @@ int main(void)
 				break;
 			}
 			default:
-				printf("Message with identifier %i has arrived.\n", packet->data[0]);
+				printf("Message with identifier %i has arrived.\n", pPacket->data[0]);
 				break;
 			}
 		}
@@ -267,11 +287,11 @@ int main(void)
 
 
 	// shut down networking by destroying peer interface instance
-	RakNet::RakPeerInterface::DestroyInstance(peer);
+	RakNet::RakPeerInterface::DestroyInstance(pPeer);
 
 
 	// exit
-	printf("\n\n");
-	system("pause");
+	//printf("\n\n");
+	//system("pause");
 	return 0;
 }
