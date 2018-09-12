@@ -63,7 +63,7 @@ struct BaseData
 {
 	unsigned char typeID;
 
-	char message[255];
+	char message[256];
 };
 #pragma pack(pop)
 
@@ -73,8 +73,8 @@ struct ChatRequest
 {
 	unsigned char typeID;
 
-	char recipient[31];
-	char message[511];
+	char recipient[32];
+	char message[512];
 };
 #pragma pack(pop)
 
@@ -86,15 +86,15 @@ struct ChatMessage
 
 	bool isPrivate;
 
-	char sender[31];
-	char message[511];
+	char sender[32];
+	char message[512];
 };
 #pragma pack(pop)
 
 // This Structure holds the userID of all current peer connections to the server
 struct userID
 {
-	char username[31];
+	char username[32];
 	RakNet::RakNetGUID guid;
 };
 
@@ -108,11 +108,11 @@ int main(void)
 	unsigned short SERVER_PORT = 60000;
 
 	// Host Data
-	char hostName[31] = "";
+	char hostName[32] = "";
 	std::list<userID> users;
 
 	// Client Data
-	char username[31] = "";
+	char username[32] = "";
 
 	// Create RakNet peer and packet instance
 	RakNet::RakPeerInterface* pPeer = RakNet::RakPeerInterface::GetInstance();
@@ -165,8 +165,8 @@ int main(void)
 		pPeer->Connect(str, SERVER_PORT, 0, 0);
 	}
 
-	while (1)
-	{
+	while (strcmp(str, "/quit\n") != 0)
+	{	
 		for (
 			pPacket = pPeer->Receive(); 
 			pPacket; 
@@ -199,8 +199,6 @@ int main(void)
 				BaseData msg[1];
 				msg->typeID = ID_USERNAME_REQUEST;
 				strcpy(msg->message, username);
-
-				// ****TODO: Handle edge-case for username being taken?
 
 				// Send username message request
 				pPeer->Send((char*)msg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
@@ -253,6 +251,8 @@ int main(void)
 
 					// Send username available success packet
 					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+
+					//***TODO: Server should broadcast a message welcoming new participant
 				}
 			}
 			break;
@@ -291,15 +291,34 @@ int main(void)
 				BaseData* data = (BaseData*)pPacket->data;
 				printf("%s \n", data->message);
 
+				if (isServer == false) {
+					fgets(str, sizeof(str), stdin);
+
+					// Parse input for any specific conditions
+					if (strcmp(str, "/help\n") == 0) {
+						printf("==== COMMANDS ==== \n");
+						printf("/quit -- Exit the Program \n");
+
+						fgets(str, sizeof(str), stdin);
+					}
+
+					// Default: Send message packet
+					ChatRequest msg[1];
+					msg->typeID = ID_CHAT_REQUEST;
+					strcpy(msg->message, str);
+
+					pPeer->Send((char*)msg, sizeof(ChatRequest), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
+				}
+
 				break;
 			}
 			default:
 				printf("Message with identifier %i has arrived.\n", pPacket->data[0]);
+				// Input loop
 				break;
 			}
 		}
 	}
-
 
 	// Shut down & destroy peer
 	RakNet::RakPeerInterface::DestroyInstance(pPeer);
