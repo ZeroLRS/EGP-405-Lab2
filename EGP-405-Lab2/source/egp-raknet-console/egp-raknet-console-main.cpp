@@ -160,6 +160,8 @@ int main(void)
 
 		printf("Enter a nickname: \n");
 		fgets(username, sizeof(username), stdin);
+		// Strip out the end line character from fgets
+		username[strcspn(username, "\n")] = 0;
 
 		printf("Connecting to server... \n");
 		pPeer->Connect(str, SERVER_PORT, 0, 0);
@@ -207,6 +209,7 @@ int main(void)
 			case ID_USERNAME_REQUEST:
 			{
 				char usernameReq[31];
+				char serverMsg[512];
 				bool isDuplicate = false;
 
 				BaseData usernameMsg[1];
@@ -254,6 +257,12 @@ int main(void)
 					pPeer->Send((char*)usernameMsg, sizeof(BaseData), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
 
 					//***TODO: Server should broadcast a message welcoming new participant
+					ChatMessage joinMsg[1];
+					joinMsg->typeID = ID_GAME_MESSAGE;
+					joinMsg->isPrivate = false;
+					strcpy(joinMsg->sender, hostName);
+					sprintf(serverMsg, "%s has joined the channel.", usernameReq);
+					pPeer->Send((char*)joinMsg, sizeof(ChatMessage), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
 				}
 			}
 			break;
@@ -293,12 +302,24 @@ int main(void)
 				printf("%s \n", data->message);
 
 				if (isServer == false) {
+					bool isPrivate = true;
+					char recipient[32];
+
 					fgets(str, sizeof(str), stdin);
 
 					// Parse input for any specific conditions
 					if (strcmp(str, "/help\n") == 0) {
 						printf("==== COMMANDS ==== \n");
 						printf("/quit -- Exit the Program \n");
+						printf("/pmsg -- Send a private message \n");
+					}
+					// Check if private message, if pmsg check that recipient isn't self
+					if (strcmp(str, "/pmsg\n") == 0) {
+						isPrivate = true;
+						printf("Enter recipient: "); 
+						fgets(recipient, sizeof(recipient), stdin);
+						// Strip out the end line character from fgets
+						recipient[strcspn(recipient, "\n")] = 0;
 
 						fgets(str, sizeof(str), stdin);
 					}
@@ -306,6 +327,9 @@ int main(void)
 					// Default: Send message packet
 					ChatRequest msg[1];
 					msg->typeID = ID_CHAT_REQUEST;
+
+					// set private flag if it is a private msg
+
 					strcpy(msg->message, str);
 
 					pPeer->Send((char*)msg, sizeof(ChatRequest), HIGH_PRIORITY, RELIABLE, 0, pPacket->systemAddress, false);
@@ -351,6 +375,7 @@ int main(void)
 
 				printf("%s: %s", outMsg->sender, outMsg->message);
 
+				//****TODO insert conditional for if packet is private
 				pPeer->Send((char*)outMsg, sizeof(ChatMessage), HIGH_PRIORITY, RELIABLE, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
 			}
 				break;
@@ -367,6 +392,8 @@ int main(void)
 					printf("%s: %s", data->sender, data->message);
 				}
 
+				// Implement typing another message here
+				// Implement removing end of line character from username
 			}
 				break;
 			default:
